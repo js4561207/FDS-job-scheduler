@@ -112,11 +112,13 @@ Thanks to the official FDS and Smokeview developers at NIST for the simulator,
 visualization tools, documentation, and public research ecosystem that make
 this workflow possible.
 
+Official FDS repository:
+
+- https://github.com/firemodels/fds
+
 ## Contribution
 
 Contributions are welcome through issues and pull requests.
-
-OpenAI Codex was used as a coding collaborator during development.
 
 ## License
 
