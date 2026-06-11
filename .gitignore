@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Test and local cache
+.pytest_cache/
+.tmp_pytest/
+
+# Build artifacts
+build/
+dist/
+*.spec.tmp
+
+# Local scheduler state and logs
+scheduler_state/
+scheduler_state_*/
+scheduler_state_test/
+scheduler_state_test_*/
+
+# Local FDS projects, outputs, and smoke runs
+Project/
+*.out
+*.err
+*.smv
+*.smvv
+*.sf
+*.s3d
+*.s3dd
+*.sz
+*.bf
+*.bnd
+*.restart
+*.tcframes
+*_cpu.csv
+*_devc.csv
+*_hrr.csv
+*_steps.csv
+*_git.txt
+*.ini
+*.views
+*.pyrogeom
+*.pyrofloors
+*.psm
+*.psm.zip
+*.ps~
+
+# Bundled binaries and shortcuts
+*.exe
+*.lnk
+*.dll
+*.zip
+
+# Large local reference material
+*.pdf
+

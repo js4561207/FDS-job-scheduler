@@ -1,0 +1,5 @@
+&HEAD CHID='sample_case', TITLE='Scheduler parser sample' /
+&MESH IJK=10,10,10, XB=0,1,0,1,0,1, MPI_PROCESS=0 /
+&MESH IJK=10,10,10, XB=1,2,0,1,0,1, MPI_PROCESS=1 /
+&TIME T_END=1.0 /
+&TAIL /

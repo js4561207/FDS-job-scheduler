@@ -1,0 +1,5 @@
+&HEAD CHID='smoke_fds_case', TITLE='Scheduler real FDS smoke test' /
+&MESH IJK=4,4,4, XB=0,1,0,1,0,1 /
+&TIME T_END=0.0 /
+&VENT XB=0,1,0,0,0,1, SURF_ID='OPEN' /
+&TAIL /
