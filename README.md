@@ -1,120 +1,123 @@
 # FDS Job Scheduler
 
-Windows desktop scheduler for local Fire Dynamics Simulator (FDS) jobs.
+FDS Job Scheduler is a small Windows desktop tool for running and managing
+local Fire Dynamics Simulator (FDS) jobs.
 
-This project provides a lightweight Tkinter-based interface for queuing,
-monitoring, resubmitting, stopping, restarting, and inspecting local FDS
-calculations on Windows workstations.
+It is intended for day-to-day simulation work where you have many `.fds` cases
+to run, stop, restart, inspect, and compare. Instead of repeatedly opening a
+CMDfds window and typing commands by hand, you can queue cases from a simple
+interface and keep their logs, status, output folders, CSV curves, and
+Smokeview/PyroSim result previews in one place.
 
-## Features
+## What it can do
 
-- detects a local FDS 6 installation
-- queues single or batch `.fds` jobs
-- supports `fds_local` and direct `mpiexec` launch modes
-- tracks MPI processes, OpenMP threads, and mesh-to-rank hints
-- stores scheduler history and restores it on next launch
-- imports completed historical runs from an existing case directory
-- supports graceful stop and restart workflows
-- opens work directories, logs, Smokeview/PyroSim preview files, and CSV plots
-- visualizes FDS CSV outputs such as `*_devc.csv`, `*_hrr.csv`, `*_steps.csv`, and `*_cpu.csv`
-- packages into a Windows executable with PyInstaller
-
-## Screenshots and local outputs
-
-This public repository excludes local calculation projects, result files,
-packaged executables, scheduler state, and bundled PDF manuals. Those files are
-useful for day-to-day engineering work but are not appropriate for a clean
-source repository.
+- add one or more `.fds` files to a local job queue
+- choose MPI process count and OpenMP thread count
+- run jobs through the installed FDS environment on Windows
+- show progress, latest simulation time, MPI ranks, restart availability, and CPU output status
+- stop a running job by creating the FDS `.stop` file
+- create restart jobs when restart files are available
+- reopen logs and output directories from the job list
+- import an already-finished case folder as a historical job
+- plot common FDS CSV outputs such as `*_devc.csv`, `*_hrr.csv`, `*_steps.csv`, and `*_cpu.csv`
+- open `.smv` or `.smvv` result previews with PyroSim Results when available
 
 ## Requirements
 
 - Windows
-- Python 3.11+
-- a local FDS installation, typically under
-  `C:\Program Files\firemodels\FDS6`
+- Python 3.11 or newer
+- FDS 6 installed locally, normally at:
 
-PyroSim/Smokeview preview integration is supported when `PyroSimResults.exe`
-is installed locally.
+```text
+C:\Program Files\firemodels\FDS6
+```
 
-## Run from source
+PyroSim Results is optional. If installed, the scheduler can use
+`PyroSimResults.exe` to open `.smv` and `.smvv` preview files.
+
+## Install and run with Python
+
+Clone the repository:
+
+```powershell
+git clone https://github.com/js4561207/FDS-job-scheduler.git
+cd FDS-job-scheduler
+```
+
+Run the app:
 
 ```powershell
 python main.py
 ```
 
-Entry point:
-
-- `main.py`
-
-## Build the executable
-
-```powershell
-.\build_exe.ps1
-```
-
-The packaged executable is written to:
-
-```text
-dist\FDS Scheduler\FDS Scheduler.exe
-```
-
-## Repository layout
-
-```text
-fds_scheduler/         application package
-tests/                 unit tests and smoke-test inputs
-build_exe.ps1          PyInstaller build script
-FDS Scheduler.spec     PyInstaller spec file
-FDS_RUN_RULES.md       local execution assumptions and notes
-```
-
-## Key behavior
-
-### Scheduler state
-
-The scheduler stores job history under `scheduler_state\jobs.json` and
-per-job logs under `scheduler_state\logs\`.
-
-### Existing result import
-
-If you open an `.fds` file whose directory already contains matching result
-files such as `.out`, `.err`, `.smv`, `.smvv`, `*_csv`, or `.restart`, the
-application can import that finished or stopped run as a historical task.
-
-### CSV visualization
-
-The UI can plot multiple FDS result series from:
-
-- `*_devc.csv`
-- `*_hrr.csv`
-- `*_steps.csv`
-- `*_cpu.csv`
-
-### Smokeview / PyroSim preview
-
-The scheduler can open `.smvv` or `.smv` files associated with a job and will
-prefer `PyroSimResults.exe` when available.
-
-## Testing
-
-Run unit tests:
+For tests:
 
 ```powershell
 python -m pytest --basetemp .tmp_pytest tests\test_core.py
 ```
 
-## License
+## Use the packaged Windows build
 
-This repository is released under the MIT License. See [LICENSE](LICENSE).
+Download the latest Windows zip from the Releases page:
+
+```text
+https://github.com/js4561207/FDS-job-scheduler/releases
+```
+
+Unzip it and run:
+
+```text
+FDS Scheduler.exe
+```
+
+Do not move the executable away from the `_internal` folder in the same
+directory; the packaged app needs those files.
+
+## Basic use
+
+1. Click `Browse` and select a `.fds` input file.
+2. Check the parsed CHID, mesh count, and suggested MPI setting.
+3. Adjust MPI processes, OpenMP threads, solver mode, and output directory if needed.
+4. Click `Add Job`.
+5. Use the job list to stop, restart, resubmit, open logs, open output folders, plot CSV files, or open SMV previews.
+
+If you select a `.fds` file from a folder that already contains completed FDS
+outputs, use `Import Result` to add that finished run to the job list.
+
+## Build from source
+
+PyInstaller is used for the Windows build:
+
+```powershell
+.\build_exe.ps1
+```
+
+The output is written to:
+
+```text
+dist\FDS Scheduler\FDS Scheduler.exe
+```
+
+## Notes
+
+This tool is independent and unofficial. It is not part of FDS, Smokeview,
+NIST, Thunderhead Engineering, or PyroSim.
+
+Local simulation outputs, PDF manuals, packaged binaries, scheduler state, and
+test run folders are intentionally excluded from the repository.
 
 ## Acknowledgements
 
-- Thanks to the official FDS/Smokeview team at NIST for FDS, Smokeview, and
-  the surrounding documentation and research ecosystem.
-- OpenAI Codex served as an engineering collaborator for parts of the
-  implementation and repository preparation.
+Thanks to the official FDS and Smokeview developers at NIST for the simulator,
+visualization tools, documentation, and public research ecosystem that make
+this workflow possible.
 
-## Disclaimer
+## Contribution
 
-This is an independent utility project. It is not an official FDS, Smokeview,
-NIST, or PyroSim product.
+Contributions are welcome through issues and pull requests.
+
+OpenAI Codex was used as a coding collaborator during development.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).
