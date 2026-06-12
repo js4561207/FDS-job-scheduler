@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from fds_scheduler.fds_case import ensure_restart_case, parse_fds_case
-from fds_scheduler.app import find_pyrosim_results, smv_preview_file_for_record
+from fds_scheduler.app import ExperimentSeriesData, CsvSeriesData, find_pyrosim_results, match_validation_series, smv_preview_file_for_record
 from fds_scheduler.fds_env import detect_fds_environment
 from fds_scheduler.fds_output import summarize_fds_output
 from fds_scheduler.job import FdsScheduler, JobConfig, JobRecord, JobStatus
@@ -278,3 +278,21 @@ def test_pyrosim_results_can_be_located():
     viewer = find_pyrosim_results()
     assert viewer is not None
     assert viewer.name.lower() == "pyrosimresults.exe"
+
+
+def test_validation_matches_case_insensitive_measurement_names():
+    experiment = ExperimentSeriesData(
+        path=Path("experiment.xlsx"),
+        sheet="Sheet1",
+        headers=["Time", "ir-v1", "Th-h1"],
+        rows=[[0.0, 1.0, 2.0]],
+    )
+    fds = CsvSeriesData(
+        path=Path("case_devc.csv"),
+        units=["s", "kW/m2", "C"],
+        headers=["Time", "IR-V1", "Th-h1"],
+        rows=[[0.0, 1.1, 2.1]],
+        series_columns=[1, 2],
+    )
+    matches = match_validation_series(experiment, fds)
+    assert [(match.experiment_label, match.fds_label) for match in matches] == [("ir-v1", "IR-V1"), ("Th-h1", "Th-h1")]

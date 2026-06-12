@@ -3,12 +3,15 @@ from __future__ import annotations
 import os
 import queue
 import csv
+import re
 import shutil
 import subprocess
 import time
 import tkinter as tk
+import zipfile
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from xml.etree import ElementTree
 
 from . import __version__
 from .fds_case import parse_fds_case
@@ -175,6 +178,7 @@ class SchedulerApp(tk.Tk):
         ttk.Button(job_tools, text="Open Dir", command=self._open_selected_workdir).grid(row=0, column=2, padx=(0, 6))
         ttk.Button(job_tools, text="Refresh Out", command=self._refresh_selected_output).grid(row=0, column=3, padx=(0, 6))
         ttk.Button(job_tools, text="Import Result", command=self._import_selected_existing_result).grid(row=0, column=4, padx=(0, 6))
+        ttk.Button(job_tools, text="Validation", command=self._open_selected_validation).grid(row=0, column=5, padx=(0, 6))
 
         columns = (
             "status",
@@ -450,6 +454,22 @@ class SchedulerApp(tk.Tk):
             self.status_var.set(f"Opened SMV preview with {opener}: {preview.name}")
         except OSError as exc:
             messagebox.showerror("Open SMV failed", f"{preview}\n\n{exc}")
+
+    def _open_selected_validation(self) -> None:
+        job_id = self._selected_job_id()
+        if not job_id:
+            return
+        record = self.scheduler.jobs[job_id]
+        workdir = record.working_dir or record.config.case_path.parent
+        excel_files = sorted(workdir.glob("*.xlsx"))
+        csv_files = self._csv_files_for_record(record)
+        if not excel_files:
+            messagebox.showinfo("No experiment data", f"No .xlsx experiment data was found in:\n{workdir}")
+            return
+        if not csv_files:
+            messagebox.showinfo("No FDS CSV", f"No FDS CSV files were found in:\n{workdir}")
+            return
+        ValidationWindow(self, excel_files, csv_files).focus()
 
     def _import_selected_existing_result(self) -> None:
         path_text = self.case_path_var.get()
@@ -776,6 +796,19 @@ class CsvSeriesData:
         return [float(value) for value in values]
 
 
+class ExperimentSeriesData:
+    def __init__(self, path: Path, sheet: str, headers: list[str], rows: list[list[float | None]]) -> None:
+        self.path = path
+        self.sheet = sheet
+        self.headers = headers
+        self.rows = rows
+        self.series_columns = _numeric_series_columns(rows, start_column=1)
+
+    @property
+    def x_label(self) -> str:
+        return self.headers[0] if self.headers else "Time"
+
+
 def load_csv_series(path: Path) -> CsvSeriesData:
     with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
         source_rows = [row for row in csv.reader(handle) if any(cell.strip() for cell in row)]
@@ -812,6 +845,98 @@ def load_csv_series(path: Path) -> CsvSeriesData:
     if not series_columns:
         raise ValueError("CSV file does not contain numeric series columns.")
     return CsvSeriesData(path, units, headers, parsed_rows, series_columns)
+
+
+def load_experiment_excel(path: Path) -> ExperimentSeriesData:
+    with zipfile.ZipFile(path) as package:
+        workbook = ElementTree.fromstring(package.read("xl/workbook.xml"))
+        ns = {
+            "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+            "rel": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            "pkgrel": "http://schemas.openxmlformats.org/package/2006/relationships",
+        }
+        sheets = workbook.find("main:sheets", ns)
+        if sheets is None or not list(sheets):
+            raise ValueError("Excel workbook contains no sheets.")
+        first_sheet = list(sheets)[0]
+        sheet_name = first_sheet.attrib.get("name", "Sheet1")
+        relation_id = first_sheet.attrib.get(f"{{{ns['rel']}}}id")
+        rels = ElementTree.fromstring(package.read("xl/_rels/workbook.xml.rels"))
+        target = ""
+        for rel in rels:
+            if rel.attrib.get("Id") == relation_id:
+                target = rel.attrib.get("Target", "")
+                break
+        sheet_path = "xl/" + target.lstrip("/")
+        if not sheet_path.endswith(".xml"):
+            sheet_path += ".xml"
+        shared_strings = _xlsx_shared_strings(package)
+        sheet_xml = ElementTree.fromstring(package.read(sheet_path))
+        rows: list[list[str]] = []
+        for row_node in sheet_xml.findall(".//main:sheetData/main:row", ns):
+            values: list[str] = []
+            for cell in row_node.findall("main:c", ns):
+                index = _xlsx_column_index(cell.attrib.get("r", ""))
+                while len(values) < index - 1:
+                    values.append("")
+                values.append(_xlsx_cell_text(cell, shared_strings, ns))
+            if any(value.strip() for value in values):
+                rows.append(values)
+    if len(rows) < 2:
+        raise ValueError("Experiment workbook does not contain headers and data.")
+    headers = [value.strip() or f"Column {index + 1}" for index, value in enumerate(rows[0])]
+    parsed_rows: list[list[float | None]] = []
+    for source in rows[1:]:
+        parsed: list[float | None] = []
+        for value in source[: len(headers)]:
+            try:
+                parsed.append(float(value))
+            except ValueError:
+                parsed.append(None)
+        if parsed and parsed[0] is not None:
+            parsed_rows.append(parsed)
+    if not parsed_rows:
+        raise ValueError("Experiment workbook does not contain numeric data rows.")
+    return ExperimentSeriesData(path, sheet_name, headers, parsed_rows)
+
+
+def _xlsx_shared_strings(package: zipfile.ZipFile) -> list[str]:
+    try:
+        root = ElementTree.fromstring(package.read("xl/sharedStrings.xml"))
+    except KeyError:
+        return []
+    ns = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    strings: list[str] = []
+    for item in root.findall("main:si", ns):
+        parts = [node.text or "" for node in item.findall(".//main:t", ns)]
+        strings.append("".join(parts))
+    return strings
+
+
+def _xlsx_cell_text(cell: ElementTree.Element, shared_strings: list[str], ns: dict[str, str]) -> str:
+    cell_type = cell.attrib.get("t", "")
+    value_node = cell.find("main:v", ns)
+    if cell_type == "inlineStr":
+        return "".join(node.text or "" for node in cell.findall(".//main:t", ns))
+    if value_node is None or value_node.text is None:
+        return ""
+    value = value_node.text
+    if cell_type == "s":
+        try:
+            return shared_strings[int(value)]
+        except (ValueError, IndexError):
+            return ""
+    return value
+
+
+def _xlsx_column_index(reference: str) -> int:
+    letters = "".join(ch for ch in reference if ch.isalpha())
+    if not letters:
+        return 1
+    index = 0
+    for letter in letters.upper():
+        index = index * 26 + (ord(letter) - ord("A") + 1)
+    return index
 
 
 def _row_has_numeric_values(row: list[str]) -> bool:
@@ -946,7 +1071,7 @@ class CsvPlotWindow(tk.Toplevel):
             return
         width = max(self.canvas.winfo_width(), 300)
         height = max(self.canvas.winfo_height(), 220)
-        left, right, top, bottom = 72, width - 24, 34, height - 58
+        left, right, top, bottom = 72, max(width - 210, 180), 34, height - 58
         if right <= left or bottom <= top:
             return
 
@@ -991,7 +1116,8 @@ class CsvPlotWindow(tk.Toplevel):
                 color = self.COLORS[series_index % len(self.COLORS)]
                 self.canvas.create_line(*points, fill=color, width=2)
                 label = self.data.headers[col] if col < len(self.data.headers) else f"Column {col + 1}"
-                self.canvas.create_text(left + 10, top + 18 + series_index * 18, text=label, fill=color, anchor="w")
+                self.canvas.create_line(right + 18, top + 16 + series_index * 18, right + 40, top + 16 + series_index * 18, fill=color, width=2)
+                self.canvas.create_text(right + 46, top + 16 + series_index * 18, text=label, fill=color, anchor="w")
         title = self.data.path.name
         self.canvas.create_text((left + right) / 2, 16, text=title, anchor="center", font=("TkDefaultFont", 10, "bold"))
         self.status_var.set(f"{len(rows)} rows, {len(selected)} series, {self.data.x_label}")
@@ -1010,6 +1136,205 @@ class CsvPlotWindow(tk.Toplevel):
             self.canvas.create_text(left - 8, y, text=f"{y_value:.3g}", fill="#475569", anchor="e")
             if tick:
                 self.canvas.create_line(left, y, right, y, fill="#e2e8f0")
+
+
+class ValidationWindow(tk.Toplevel):
+    COLORS = CsvPlotWindow.COLORS
+
+    def __init__(self, master: tk.Tk, excel_files: list[Path], csv_files: list[Path]) -> None:
+        super().__init__(master)
+        self.title("Validation")
+        self.geometry("1060x660")
+        self.minsize(820, 520)
+        self.experiment = load_experiment_excel(excel_files[0])
+        self.fds = self._load_best_fds_data(csv_files)
+        self.matches = match_validation_series(self.experiment, self.fds)
+        self.visible_matches: list[ValidationMatch] = []
+        self.status_var = tk.StringVar(value="")
+
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(1, weight=1)
+        self._build_ui()
+        self._populate_matches()
+        self._redraw()
+
+    def _build_ui(self) -> None:
+        top = ttk.Frame(self, padding=10)
+        top.grid(row=0, column=0, columnspan=2, sticky="ew")
+        ttk.Label(top, text=f"Experiment: {self.experiment.path.name}").grid(row=0, column=0, sticky="w")
+        ttk.Label(top, text=f"FDS: {self.fds.path.name}").grid(row=0, column=1, sticky="w", padx=(20, 0))
+
+        side = ttk.Frame(self, padding=(10, 0, 8, 10))
+        side.grid(row=1, column=0, sticky="ns")
+        side.rowconfigure(1, weight=1)
+        ttk.Label(side, text="Matched points").grid(row=0, column=0, sticky="w")
+        self.match_list = tk.Listbox(side, selectmode="extended", width=30, exportselection=False)
+        self.match_list.grid(row=1, column=0, sticky="ns")
+        self.match_list.bind("<<ListboxSelect>>", lambda _event: self._redraw())
+        buttons = ttk.Frame(side)
+        buttons.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        buttons.columnconfigure((0, 1), weight=1)
+        ttk.Button(buttons, text="All", command=self._select_all).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ttk.Button(buttons, text="Clear", command=self._clear_selection).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+        plot_frame = ttk.Frame(self, padding=(0, 0, 10, 10))
+        plot_frame.grid(row=1, column=1, sticky="nsew")
+        plot_frame.columnconfigure(0, weight=1)
+        plot_frame.rowconfigure(0, weight=1)
+        self.canvas = tk.Canvas(plot_frame, background="white", highlightthickness=1, highlightbackground="#cbd5e1")
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.canvas.bind("<Configure>", lambda _event: self._redraw())
+        ttk.Label(plot_frame, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(6, 0))
+
+    def _populate_matches(self) -> None:
+        self.match_list.delete(0, "end")
+        self.visible_matches = self.matches
+        for match in self.visible_matches:
+            self.match_list.insert("end", f"{match.label}: FDS {match.fds_label} / Exp {match.experiment_label}")
+        if self.visible_matches:
+            self.match_list.selection_set(0)
+
+    def _select_all(self) -> None:
+        self.match_list.selection_set(0, "end")
+        self._redraw()
+
+    def _clear_selection(self) -> None:
+        self.match_list.selection_clear(0, "end")
+        self._redraw()
+
+    def _redraw(self) -> None:
+        self.canvas.delete("all")
+        width = max(self.canvas.winfo_width(), 320)
+        height = max(self.canvas.winfo_height(), 240)
+        left, right, top, bottom = 72, max(width - 260, 200), 36, height - 58
+        if right <= left or bottom <= top:
+            return
+        selected = [self.visible_matches[index] for index in self.match_list.curselection()]
+        if not selected:
+            self.status_var.set("Select one or more matched points.")
+            return
+
+        series = []
+        for match in selected:
+            series.append((match, "FDS", self._series_points(self.fds.rows, match.fds_column)))
+            series.append((match, "Experiment", self._series_points(self.experiment.rows, match.experiment_column)))
+        x_values = [x for _match, _source, points in series for x, _y in points]
+        y_values = [y for _match, _source, points in series for _x, y in points]
+        if not x_values or not y_values:
+            self.status_var.set("Selected points have no numeric values.")
+            return
+        x_min, x_max = min(x_values), max(x_values)
+        y_min, y_max = min(y_values), max(y_values)
+        if x_min == x_max:
+            x_max += 1
+        if y_min == y_max:
+            pad = abs(y_min) * 0.05 or 1
+            y_min -= pad
+            y_max += pad
+
+        self._draw_axes(left, right, top, bottom, x_min, x_max, y_min, y_max)
+        legend_y = top + 14
+        for index, match in enumerate(selected):
+            color = self.COLORS[index % len(self.COLORS)]
+            fds_points = self._map_points(self._series_points(self.fds.rows, match.fds_column), left, right, top, bottom, x_min, x_max, y_min, y_max)
+            exp_points = self._map_points(
+                self._series_points(self.experiment.rows, match.experiment_column), left, right, top, bottom, x_min, x_max, y_min, y_max
+            )
+            if len(fds_points) >= 4:
+                self.canvas.create_line(*fds_points, fill=color, width=2)
+            if len(exp_points) >= 4:
+                self._draw_dashed_polyline(exp_points, color)
+            self.canvas.create_line(right + 18, legend_y, right + 40, legend_y, fill=color, width=2)
+            self.canvas.create_text(right + 46, legend_y, text=f"{match.label} FDS", fill=color, anchor="w")
+            self._draw_dashed_line(right + 18, legend_y + 16, right + 40, legend_y + 16, color)
+            self.canvas.create_text(right + 46, legend_y + 16, text=f"{match.label} Experiment", fill=color, anchor="w")
+            legend_y += 38
+        self.canvas.create_text((left + right) / 2, 16, text="FDS vs Experiment", anchor="center", font=("TkDefaultFont", 10, "bold"))
+        self.status_var.set(f"{len(selected)} matched point(s). Solid = FDS, dashed = experiment.")
+
+    def _draw_axes(self, left: int, right: int, top: int, bottom: int, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
+        self.canvas.create_line(left, bottom, right, bottom, fill="#334155")
+        self.canvas.create_line(left, top, left, bottom, fill="#334155")
+        for tick in range(6):
+            x = left + tick * (right - left) / 5
+            value = x_min + tick * (x_max - x_min) / 5
+            self.canvas.create_line(x, bottom, x, bottom + 4, fill="#334155")
+            self.canvas.create_text(x, bottom + 18, text=f"{value:.3g}", fill="#475569")
+            y = bottom - tick * (bottom - top) / 5
+            y_value = y_min + tick * (y_max - y_min) / 5
+            self.canvas.create_line(left - 4, y, left, y, fill="#334155")
+            self.canvas.create_text(left - 8, y, text=f"{y_value:.3g}", fill="#475569", anchor="e")
+            if tick:
+                self.canvas.create_line(left, y, right, y, fill="#e2e8f0")
+
+    @staticmethod
+    def _series_points(rows: list[list[float | None]], column: int) -> list[tuple[float, float]]:
+        points = []
+        for row in rows:
+            if column < len(row) and row[0] is not None and row[column] is not None:
+                points.append((float(row[0]), float(row[column])))
+        return points
+
+    @staticmethod
+    def _map_points(
+        points: list[tuple[float, float]], left: int, right: int, top: int, bottom: int, x_min: float, x_max: float, y_min: float, y_max: float
+    ) -> list[float]:
+        mapped: list[float] = []
+        for x_value, y_value in points:
+            x = left + (x_value - x_min) / (x_max - x_min) * (right - left)
+            y = bottom - (y_value - y_min) / (y_max - y_min) * (bottom - top)
+            mapped.extend((x, y))
+        return mapped
+
+    def _draw_dashed_polyline(self, points: list[float], color: str) -> None:
+        for index in range(0, len(points) - 2, 2):
+            self._draw_dashed_line(points[index], points[index + 1], points[index + 2], points[index + 3], color)
+
+    def _draw_dashed_line(self, x1: float, y1: float, x2: float, y2: float, color: str) -> None:
+        self.canvas.create_line(x1, y1, x2, y2, fill=color, width=2, dash=(5, 3))
+
+    @staticmethod
+    def _load_best_fds_data(csv_files: list[Path]) -> CsvSeriesData:
+        preferred = [path for path in csv_files if path.name.lower().endswith("_devc.csv")]
+        for path in preferred + csv_files:
+            data = load_csv_series(path)
+            if data.series_columns:
+                return data
+        raise ValueError("No plottable FDS CSV data found.")
+
+
+class ValidationMatch:
+    def __init__(self, label: str, experiment_column: int, fds_column: int, experiment_label: str, fds_label: str) -> None:
+        self.label = label
+        self.experiment_column = experiment_column
+        self.fds_column = fds_column
+        self.experiment_label = experiment_label
+        self.fds_label = fds_label
+
+
+def match_validation_series(experiment: ExperimentSeriesData, fds: CsvSeriesData) -> list[ValidationMatch]:
+    fds_by_key = {_measurement_key(fds.headers[column]): column for column in fds.series_columns if column < len(fds.headers)}
+    matches: list[ValidationMatch] = []
+    for column in experiment.series_columns:
+        if column >= len(experiment.headers):
+            continue
+        exp_label = experiment.headers[column]
+        key = _measurement_key(exp_label)
+        fds_column = fds_by_key.get(key)
+        if fds_column is None:
+            continue
+        fds_label = fds.headers[fds_column]
+        matches.append(ValidationMatch(label=_display_measurement_label(exp_label), experiment_column=column, fds_column=fds_column, experiment_label=exp_label, fds_label=fds_label))
+    return matches
+
+
+def _measurement_key(label: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", label.lower())
+
+
+def _display_measurement_label(label: str) -> str:
+    parts = re.split(r"[-_\s]+", label.strip())
+    return "-".join(part.upper() if len(part) <= 2 else part for part in parts if part)
 
 
 def main() -> None:
