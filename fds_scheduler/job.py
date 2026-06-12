@@ -253,6 +253,23 @@ class FdsScheduler:
             self._save_state()
         self._notify(record)
 
+    def delete_job(self, job_id: str) -> list[str]:
+        with self._lock:
+            record = self.jobs[job_id]
+            if record.status in {JobStatus.RUNNING, JobStatus.STOPPING}:
+                raise ValueError("Stop or cancel the running job before deleting it from history.")
+            if job_id in self._processes:
+                raise ValueError("Cannot delete a job while its process is still tracked.")
+            ids = self._job_descendant_ids(job_id)
+            for delete_id in ids:
+                child = self.jobs.get(delete_id)
+                if child and child.status in {JobStatus.RUNNING, JobStatus.STOPPING}:
+                    raise ValueError("Stop or cancel running restart jobs before deleting this history entry.")
+            for delete_id in ids:
+                self.jobs.pop(delete_id, None)
+            self._save_state()
+            return ids
+
     def create_restart_job(self, job_id: str) -> JobRecord:
         source = self.jobs[job_id]
         if not source.case_info:
@@ -606,6 +623,17 @@ class FdsScheduler:
         stop_file = work_dir / f"{record.case_info.chid}.stop"
         if stop_file.exists():
             stop_file.unlink()
+
+    def _job_descendant_ids(self, job_id: str) -> list[str]:
+        ids = [job_id]
+        index = 0
+        while index < len(ids):
+            parent = ids[index]
+            for child_id, record in self.jobs.items():
+                if record.config.restart_from_job_id == parent and child_id not in ids:
+                    ids.append(child_id)
+            index += 1
+        return ids
 
     def _save_state(self) -> None:
         state_path = self.state_dir / "jobs.json"

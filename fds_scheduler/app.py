@@ -158,6 +158,9 @@ class SchedulerApp(tk.Tk):
         ttk.Button(actions, text="Refresh Out", command=self._refresh_selected_output).grid(
             row=4, column=1, sticky="ew", padx=(4, 0), pady=(6, 0)
         )
+        ttk.Button(actions, text="Delete Job", command=self._delete_selected_job).grid(
+            row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0)
+        )
         details = ttk.LabelFrame(controls, text="Mesh / Command", padding=8)
         details.grid(row=15, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
         controls.rowconfigure(15, weight=1)
@@ -179,6 +182,7 @@ class SchedulerApp(tk.Tk):
         ttk.Button(job_tools, text="Refresh Out", command=self._refresh_selected_output).grid(row=0, column=3, padx=(0, 6))
         ttk.Button(job_tools, text="Import Result", command=self._import_selected_existing_result).grid(row=0, column=4, padx=(0, 6))
         ttk.Button(job_tools, text="Validation", command=self._open_selected_validation).grid(row=0, column=5, padx=(0, 6))
+        ttk.Button(job_tools, text="Delete Job", command=self._delete_selected_job).grid(row=0, column=6, padx=(0, 6))
 
         columns = (
             "status",
@@ -380,6 +384,32 @@ class SchedulerApp(tk.Tk):
             self.scheduler.cancel_job(job_id)
         except Exception as exc:
             messagebox.showerror("Cancel failed", str(exc))
+
+    def _delete_selected_job(self) -> None:
+        job_id = self._selected_job_id()
+        if not job_id:
+            return
+        record = self.scheduler.jobs[job_id]
+        chid = record.case_info.chid if record.case_info else record.config.case_path.stem
+        if not messagebox.askyesno(
+            "Delete job history",
+            f"Remove job {job_id} ({chid}) from the scheduler list?\n\nFDS input and output files will not be deleted.",
+        ):
+            return
+        try:
+            deleted_ids = self.scheduler.delete_job(job_id)
+        except Exception as exc:
+            messagebox.showerror("Delete failed", str(exc))
+            return
+        for delete_id in reversed(deleted_ids):
+            if delete_id in self.job_rows:
+                self.jobs_tree.delete(delete_id)
+                self.job_rows.pop(delete_id, None)
+            self.restart_children.pop(delete_id, None)
+        for children in self.restart_children.values():
+            children[:] = [child for child in children if child not in deleted_ids]
+        self._set_details("")
+        self.status_var.set(f"Deleted {len(deleted_ids)} job history entr{'y' if len(deleted_ids) == 1 else 'ies'}")
 
     def _restart_selected(self) -> None:
         job_id = self._selected_job_id()

@@ -142,6 +142,29 @@ def test_cancel_queued_job_marks_cancelled(tmp_path):
     assert record.status == JobStatus.CANCELLED
 
 
+def test_delete_job_removes_history_only(tmp_path):
+    scheduler = FdsScheduler(state_dir=tmp_path / "state")
+    record = scheduler.submit(JobConfig(case_path=Path("tests/sample_case.fds")))
+    runtime_case = record.working_dir / record.config.case_path.name
+
+    deleted_ids = scheduler.delete_job(record.id)
+
+    assert deleted_ids == [record.id]
+    assert record.id not in scheduler.jobs
+    assert runtime_case.exists()
+    loaded = FdsScheduler(state_dir=tmp_path / "state")
+    assert record.id not in loaded.jobs
+
+
+def test_delete_running_job_is_rejected(tmp_path):
+    scheduler = FdsScheduler(state_dir=tmp_path / "state")
+    record = scheduler.submit(JobConfig(case_path=Path("tests/sample_case.fds")))
+    record.status = JobStatus.RUNNING
+
+    with pytest.raises(ValueError, match="running job"):
+        scheduler.delete_job(record.id)
+
+
 def test_finalize_preserves_cancelled_status(tmp_path):
     scheduler = FdsScheduler(state_dir=tmp_path / "state")
     record = scheduler.submit(JobConfig(case_path=Path("tests/sample_case.fds")))
