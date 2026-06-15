@@ -4,7 +4,14 @@ import time
 import pytest
 
 from fds_scheduler.fds_case import ensure_restart_case, parse_fds_case
-from fds_scheduler.app import ExperimentSeriesData, CsvSeriesData, find_pyrosim_results, match_validation_series, smv_preview_file_for_record
+from fds_scheduler.app import (
+    ExperimentSeriesData,
+    CsvSeriesData,
+    find_pyrosim_results,
+    match_validation_series,
+    scheduler_help_text,
+    smv_preview_file_for_record,
+)
 from fds_scheduler.fds_env import detect_fds_environment
 from fds_scheduler.fds_output import summarize_fds_output
 from fds_scheduler.job import FdsScheduler, JobConfig, JobRecord, JobStatus
@@ -341,3 +348,11 @@ def test_validation_matches_case_insensitive_measurement_names():
     )
     matches = match_validation_series(experiment, fds)
     assert [(match.experiment_label, match.fds_label) for match in matches] == [("ir-v1", "IR-V1"), ("Th-h1", "Th-h1")]
+
+
+def test_scheduler_help_text_mentions_default_logic_and_path_advice():
+    text = scheduler_help_text()
+    assert "Solver = auto" in text
+    assert "Pure OpenMP" in text
+    assert "do not use Chinese characters" in text
+    assert "MPI = mesh count" in text

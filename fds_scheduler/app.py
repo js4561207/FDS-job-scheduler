@@ -149,7 +149,8 @@ class SchedulerApp(tk.Tk):
         ttk.Label(top, text="FDS Root").grid(row=0, column=0, sticky="w")
         ttk.Entry(top, textvariable=self.fds_root_var, state="readonly").grid(row=0, column=1, sticky="ew", padx=8)
         ttk.Button(top, text="Refresh", command=self._load_environment).grid(row=0, column=2, padx=(0, 8))
-        ttk.Button(top, text="Open CMDfds", command=self._open_cmdfds).grid(row=0, column=3)
+        ttk.Button(top, text="Open CMDfds", command=self._open_cmdfds).grid(row=0, column=3, padx=(0, 8))
+        ttk.Button(top, text="Help", command=self._open_help_window).grid(row=0, column=4)
 
         case = ttk.LabelFrame(self, text="Case", padding=12)
         case.grid(row=1, column=0, sticky="ew", padx=12, pady=6)
@@ -229,11 +230,9 @@ class SchedulerApp(tk.Tk):
         ttk.Button(actions, text="Open Log", command=self._open_selected_log).grid(row=2, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
         ttk.Button(actions, text="Batch Add", command=self._batch_add_jobs).grid(row=2, column=1, sticky="ew", padx=(4, 0), pady=(6, 0))
         ttk.Button(actions, text="Resubmit", command=self._resubmit_selected).grid(row=3, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
-        ttk.Button(actions, text="Open Dir", command=self._open_selected_workdir).grid(row=3, column=1, sticky="ew", padx=(4, 0), pady=(6, 0))
+        ttk.Button(actions, text="Open FDS", command=self._open_selected_fds_file).grid(row=3, column=1, sticky="ew", padx=(4, 0), pady=(6, 0))
         ttk.Button(actions, text="Preview", command=self._preview_command).grid(row=4, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
-        ttk.Button(actions, text="Refresh Out", command=self._refresh_selected_output).grid(
-            row=4, column=1, sticky="ew", padx=(4, 0), pady=(6, 0)
-        )
+        ttk.Button(actions, text="Help", command=self._open_help_window).grid(row=4, column=1, sticky="ew", padx=(4, 0), pady=(6, 0))
         ttk.Button(actions, text="Delete Job", command=self._delete_selected_job).grid(
             row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0)
         )
@@ -250,18 +249,31 @@ class SchedulerApp(tk.Tk):
         jobs_frame.rowconfigure(1, weight=1)
         jobs_frame.columnconfigure(0, weight=1)
 
-        job_tools = ttk.Frame(jobs_frame)
+        job_tools = ttk.LabelFrame(jobs_frame, text="Selected Job Tools", padding=(8, 6))
         job_tools.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
-        ttk.Button(job_tools, text="Plot CSV", command=self._plot_selected_csv).grid(row=0, column=0, padx=(0, 6))
-        ttk.Button(job_tools, text="Open SMV", command=self._open_selected_smv_preview).grid(row=0, column=1, padx=(0, 6))
-        ttk.Button(job_tools, text="Open Dir", command=self._open_selected_workdir).grid(row=0, column=2, padx=(0, 6))
-        ttk.Button(job_tools, text="Refresh Out", command=self._refresh_selected_output).grid(row=0, column=3, padx=(0, 6))
-        ttk.Button(job_tools, text="Import Result", command=self._import_selected_existing_result).grid(row=0, column=4, padx=(0, 6))
-        ttk.Button(job_tools, text="Validation", command=self._open_selected_validation).grid(row=0, column=5, padx=(0, 6))
-        ttk.Button(job_tools, text="Delete Job", command=self._delete_selected_job).grid(row=0, column=6, padx=(0, 6))
-        ttk.Button(job_tools, text="Open FDS", command=self._open_selected_fds_file).grid(row=0, column=7, padx=(0, 6))
-        ttk.Button(job_tools, text="Output", command=self._open_selected_output_window).grid(row=0, column=8, padx=(0, 6))
-        ttk.Button(job_tools, text="Columns", command=self._open_column_chooser).grid(row=0, column=9, padx=(0, 6))
+        job_tools.columnconfigure((0, 1, 2, 3, 4, 5), weight=1, uniform="job_tools")
+        tool_buttons = (
+            ("Open Dir", self._open_selected_workdir),
+            ("Open FDS", self._open_selected_fds_file),
+            ("Output", self._open_selected_output_window),
+            ("Open Log", self._open_selected_log),
+            ("Refresh Out", self._refresh_selected_output),
+            ("Columns", self._open_column_chooser),
+            ("Plot CSV", self._plot_selected_csv),
+            ("Validation", self._open_selected_validation),
+            ("Open SMV", self._open_selected_smv_preview),
+            ("Import Result", self._import_selected_existing_result),
+            ("Delete Job", self._delete_selected_job),
+            ("Help", self._open_help_window),
+        )
+        for index, (text, command) in enumerate(tool_buttons):
+            ttk.Button(job_tools, text=text, command=command).grid(
+                row=index // 6,
+                column=index % 6,
+                sticky="ew",
+                padx=(0 if index % 6 == 0 else 4, 0 if index % 6 == 5 else 4),
+                pady=(0 if index < 6 else 6, 0),
+            )
 
         self.jobs_tree = ttk.Treeview(jobs_frame, columns=JOB_COLUMNS, show="headings", selectmode="browse")
         for column in JOB_COLUMNS:
@@ -516,6 +528,9 @@ class SchedulerApp(tk.Tk):
 
     def _open_column_chooser(self) -> None:
         ColumnChooserWindow(self).focus()
+
+    def _open_help_window(self) -> None:
+        HelpWindow(self).focus()
 
     def _plot_selected_csv(self) -> None:
         job_id = self._selected_job_id()
@@ -980,6 +995,69 @@ class ColumnChooserWindow(tk.Toplevel):
             ttk.Checkbutton(frame, text=JOB_HEADINGS[column], variable=app.column_visibility_vars[column], command=app._apply_visible_columns).grid(
                 row=index // 2, column=index % 2, sticky="w", padx=(0, 18), pady=3
             )
+
+
+def scheduler_help_text() -> str:
+    return (
+        "FDS Scheduler quick help\n\n"
+        "1. Basic workflow\n"
+        "- Browse: select a .fds input file.\n"
+        "- Add Job: put it into the queue.\n"
+        "- Output: open the live black output window for the selected job.\n"
+        "- Open FDS: open the selected .fds file in VS Code.\n"
+        "- Plot CSV / Validation / Open SMV: view calculated curves, compare experiment data, or open the Smokeview/PyroSim result preview.\n\n"
+        "2. Default MPI / OpenMP logic\n"
+        "- MPI processes: when a case is loaded, the scheduler reads the MESH blocks and uses the number of MPI_PROCESS groups as the default. "
+        "If MPI_PROCESS is not written in the file, it uses the mesh count.\n"
+        "- OpenMP threads: default is 1. This is the conservative setting and is usually easiest to diagnose.\n"
+        "- Solver = auto: use normal FDS when OpenMP threads is 1; use the OpenMP-capable executable when OpenMP threads is greater than 1.\n"
+        "- Solver = fds: force normal FDS. The scheduler passes OpenMP threads as 1.\n"
+        "- Solver = openmp: force the OpenMP-capable executable.\n"
+        "- Pure OpenMP: set MPI to 1, Solver to openmp, and OpenMP threads to at least 2.\n\n"
+        "3. Practical rules\n"
+        "- For most multi-mesh cases, start with MPI first. A simple first try is MPI = mesh count and OpenMP = 1.\n"
+        "- Use OpenMP when you have a clear core plan, or when one large mesh benefits from threading.\n"
+        "- Avoid MPI x OpenMP settings that exceed the real CPU cores unless you intentionally enable oversubscribed mode.\n"
+        "- If FDS already has MPI_PROCESS assignments in the .fds file, keep MPI processes consistent with those assignments.\n"
+        "- Too many MPI ranks for too few meshes usually wastes time and can make output harder to read.\n\n"
+        "4. fds_local and direct mpiexec\n"
+        "- Use fds_local wrapper is the normal FDS launcher path on Windows and is recommended first.\n"
+        "- If you turn it off, the scheduler builds a direct mpiexec command instead.\n"
+        "- fds_local does not handle spaces in .fds file names well, so keep input file names simple.\n\n"
+        "5. Path and file-name advice\n"
+        "- Strong recommendation: do not use Chinese characters in project paths or .fds file names.\n"
+        "- Also avoid spaces and very long paths. Use short ASCII folders such as E:\\fds_projects\\case01.\n"
+        "- Put each case in its own folder when possible; FDS creates many output files.\n\n"
+        "6. Time remaining estimate\n"
+        "- ETA is estimated from elapsed wall-clock time and current FDS progress percentage.\n"
+        "- It becomes meaningful only after FDS has started writing time-step progress.\n"
+        "- Early ETA can jump around; trust the trend after the calculation has run for a while."
+    )
+
+
+class HelpWindow(tk.Toplevel):
+    def __init__(self, master: tk.Tk) -> None:
+        super().__init__(master)
+        self.title("Help")
+        self.geometry("760x620")
+        self.minsize(620, 460)
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        frame = ttk.Frame(self, padding=12)
+        frame.grid(row=0, column=0, sticky="nsew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+
+        text = tk.Text(frame, wrap="word", height=28)
+        text.grid(row=0, column=0, sticky="nsew")
+        yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        yscroll.grid(row=0, column=1, sticky="ns")
+        text.configure(yscrollcommand=yscroll.set)
+        text.insert("1.0", scheduler_help_text())
+        text.configure(state="disabled")
+
+        ttk.Button(frame, text="Close", command=self.destroy).grid(row=1, column=0, columnspan=2, sticky="e", pady=(10, 0))
 
 
 def _read_tail_text(path: Path, max_chars: int = 60000) -> str:
