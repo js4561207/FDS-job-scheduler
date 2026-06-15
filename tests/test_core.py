@@ -351,8 +351,13 @@ def test_validation_matches_case_insensitive_measurement_names():
 
 
 def test_scheduler_help_text_mentions_default_logic_and_path_advice():
-    text = scheduler_help_text()
-    assert "Solver = auto" in text
-    assert "Pure OpenMP" in text
-    assert "do not use Chinese characters" in text
-    assert "MPI = mesh count" in text
+    zh_text = scheduler_help_text()
+    en_text = scheduler_help_text("en")
+    assert "Solver = auto" in zh_text
+    assert "Pure OpenMP" in zh_text
+    assert "不要在项目路径" in zh_text
+    assert "MPI = 网格数" in zh_text
+    assert "Solver = auto" in en_text
+    assert "Pure OpenMP" in en_text
+    assert "Avoid Chinese characters" in en_text
+    assert "MPI = mesh count" in en_text

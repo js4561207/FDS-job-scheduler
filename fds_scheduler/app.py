@@ -997,48 +997,82 @@ class ColumnChooserWindow(tk.Toplevel):
             )
 
 
-def scheduler_help_text() -> str:
+def scheduler_help_text(language: str = "zh") -> str:
+    if language == "en":
+        return (
+            "FDS Scheduler Help\n\n"
+            "1. Workflow\n"
+            "- Browse: choose a .fds input file.\n"
+            "- Add Job: queue the case.\n"
+            "- Output: open the live black output window for the selected job.\n"
+            "- Open FDS: open the selected .fds file in VS Code.\n"
+            "- Plot CSV / Validation / Open SMV: inspect curves, compare experiment data, or open the Smokeview/PyroSim preview.\n\n"
+            "2. MPI / OpenMP defaults\n"
+            "- MPI processes: the scheduler reads MESH blocks and uses MPI_PROCESS assignments when present. If no assignment exists, it falls back to the mesh count.\n"
+            "- OpenMP threads: default is 1.\n"
+            "- Solver = auto: use normal FDS when OpenMP threads = 1; use the OpenMP-capable executable when OpenMP threads > 1.\n"
+            "- Solver = fds: force normal FDS and keep OpenMP threads at 1.\n"
+            "- Solver = openmp: force the OpenMP-capable executable.\n"
+            "- Pure OpenMP: set MPI = 1, Solver = openmp, and OpenMP threads >= 2.\n\n"
+            "3. Practical rules\n"
+            "- For most multi-mesh cases, start with MPI first. A safe first try is MPI = mesh count and OpenMP = 1.\n"
+            "- Use OpenMP when you have a clear core plan, or when one large mesh benefits from threading.\n"
+            "- Avoid MPI x OpenMP settings that exceed real CPU cores unless you intentionally enable oversubscribed mode.\n"
+            "- Keep MPI consistent with existing MPI_PROCESS assignments in the .fds file.\n"
+            "- Too many MPI ranks for too few meshes usually wastes time.\n\n"
+            "4. fds_local\n"
+            "- Use the fds_local wrapper first on Windows.\n"
+            "- If you turn it off, the scheduler builds a direct mpiexec command.\n"
+            "- fds_local does not handle spaces in .fds file names well.\n\n"
+            "5. Path advice\n"
+            "- Avoid Chinese characters in project paths and .fds file names.\n"
+            "- Also avoid spaces and very long paths. Short ASCII folders are safer.\n"
+            "- Put each case in its own folder when possible.\n\n"
+            "6. ETA\n"
+            "- ETA is estimated from elapsed wall time and the current progress percentage.\n"
+            "- It becomes meaningful only after FDS starts writing time-step progress.\n"
+            "- Early ETA can jump around; trust the trend after the run settles."
+        )
     return (
-        "FDS Scheduler quick help\n\n"
-        "1. Basic workflow\n"
-        "- Browse: select a .fds input file.\n"
-        "- Add Job: put it into the queue.\n"
-        "- Output: open the live black output window for the selected job.\n"
-        "- Open FDS: open the selected .fds file in VS Code.\n"
-        "- Plot CSV / Validation / Open SMV: view calculated curves, compare experiment data, or open the Smokeview/PyroSim result preview.\n\n"
-        "2. Default MPI / OpenMP logic\n"
-        "- MPI processes: when a case is loaded, the scheduler reads the MESH blocks and uses the number of MPI_PROCESS groups as the default. "
-        "If MPI_PROCESS is not written in the file, it uses the mesh count.\n"
-        "- OpenMP threads: default is 1. This is the conservative setting and is usually easiest to diagnose.\n"
-        "- Solver = auto: use normal FDS when OpenMP threads is 1; use the OpenMP-capable executable when OpenMP threads is greater than 1.\n"
-        "- Solver = fds: force normal FDS. The scheduler passes OpenMP threads as 1.\n"
-        "- Solver = openmp: force the OpenMP-capable executable.\n"
-        "- Pure OpenMP: set MPI to 1, Solver to openmp, and OpenMP threads to at least 2.\n\n"
-        "3. Practical rules\n"
-        "- For most multi-mesh cases, start with MPI first. A simple first try is MPI = mesh count and OpenMP = 1.\n"
-        "- Use OpenMP when you have a clear core plan, or when one large mesh benefits from threading.\n"
-        "- Avoid MPI x OpenMP settings that exceed the real CPU cores unless you intentionally enable oversubscribed mode.\n"
-        "- If FDS already has MPI_PROCESS assignments in the .fds file, keep MPI processes consistent with those assignments.\n"
-        "- Too many MPI ranks for too few meshes usually wastes time and can make output harder to read.\n\n"
-        "4. fds_local and direct mpiexec\n"
-        "- Use fds_local wrapper is the normal FDS launcher path on Windows and is recommended first.\n"
-        "- If you turn it off, the scheduler builds a direct mpiexec command instead.\n"
-        "- fds_local does not handle spaces in .fds file names well, so keep input file names simple.\n\n"
-        "5. Path and file-name advice\n"
-        "- Strong recommendation: do not use Chinese characters in project paths or .fds file names.\n"
-        "- Also avoid spaces and very long paths. Use short ASCII folders such as E:\\fds_projects\\case01.\n"
-        "- Put each case in its own folder when possible; FDS creates many output files.\n\n"
-        "6. Time remaining estimate\n"
-        "- ETA is estimated from elapsed wall-clock time and current FDS progress percentage.\n"
-        "- It becomes meaningful only after FDS has started writing time-step progress.\n"
-        "- Early ETA can jump around; trust the trend after the calculation has run for a while."
+        "FDS 调度器帮助\n\n"
+        "1. 基本流程\n"
+        "- Browse：选择 .fds 输入文件。\n"
+        "- Add Job：加入任务队列。\n"
+        "- Output：打开所选任务的黑色输出窗口。\n"
+        "- Open FDS：用 VS Code 打开所选 .fds 文件。\n"
+        "- Plot CSV / Validation / Open SMV：看曲线、对比实验数据，或打开 Smokeview / PyroSim 预览。\n\n"
+        "2. MPI / OpenMP 默认逻辑\n"
+        "- MPI 进程：程序会读取 MESH 和 MPI_PROCESS 设置；如果文件里没有写 MPI_PROCESS，就按网格数作为默认值。\n"
+        "- OpenMP 线程：默认是 1。\n"
+        "- Solver = auto：OpenMP 线程等于 1 时用普通 FDS；大于 1 时用 OpenMP 版本。\n"
+        "- Solver = fds：强制普通 FDS，并把 OpenMP 视为 1。\n"
+        "- Solver = openmp：强制使用 OpenMP 版本。\n"
+        "- Pure OpenMP：把 MPI 设为 1，Solver 设为 openmp，OpenMP 至少为 2。\n\n"
+        "3. 简单规则\n"
+        "- 大多数多网格算例，先用 MPI。一个常见起点是 MPI = 网格数，OpenMP = 1。\n"
+        "- OpenMP 更适合线程规划清楚，或者单个大网格能从线程中受益的情况。\n"
+        "- 不要让 MPI x OpenMP 超过真实 CPU 核心数，除非你明确要用 oversubscribed 模式。\n"
+        "- 如果 .fds 里已经写了 MPI_PROCESS，最好保持 MPI 进程数一致。\n"
+        "- MPI 进程过多、网格过少，一般只会浪费时间。\n\n"
+        "4. fds_local\n"
+        "- Windows 上优先用 fds_local 启动。\n"
+        "- 关闭后，程序会改成直接拼 mpiexec 命令。\n"
+        "- fds_local 对 .fds 文件名里的空格不友好。\n\n"
+        "5. 路径建议\n"
+        "- 强烈建议不要在项目路径或 .fds 文件名里使用中文字符。\n"
+        "- 也尽量不要有空格和特别长的路径。短一点的英文路径更稳。\n"
+        "- 尽量一个算例一个文件夹。\n\n"
+        "6. 剩余时间估计\n"
+        "- ETA 根据已用时间和当前进度百分比估算。\n"
+        "- 只有 FDS 开始写时间步进度后才比较有意义。\n"
+        "- 前期 ETA 可能波动较大，运行稳定后更可信。"
     )
 
 
 class HelpWindow(tk.Toplevel):
     def __init__(self, master: tk.Tk) -> None:
         super().__init__(master)
-        self.title("Help")
+        self.title("Help / 帮助")
         self.geometry("760x620")
         self.minsize(620, 460)
         self.rowconfigure(0, weight=1)
@@ -1046,18 +1080,38 @@ class HelpWindow(tk.Toplevel):
 
         frame = ttk.Frame(self, padding=12)
         frame.grid(row=0, column=0, sticky="nsew")
-        frame.rowconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        text = tk.Text(frame, wrap="word", height=28)
-        text.grid(row=0, column=0, sticky="nsew")
-        yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
-        yscroll.grid(row=0, column=1, sticky="ns")
-        text.configure(yscrollcommand=yscroll.set)
-        text.insert("1.0", scheduler_help_text())
-        text.configure(state="disabled")
+        bar = ttk.Frame(frame)
+        bar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        bar.columnconfigure(1, weight=1)
 
-        ttk.Button(frame, text="Close", command=self.destroy).grid(row=1, column=0, columnspan=2, sticky="e", pady=(10, 0))
+        self.language_var = tk.StringVar(value="zh")
+        ttk.Label(bar, text="Language").grid(row=0, column=0, sticky="w")
+        language = ttk.Combobox(bar, textvariable=self.language_var, values=("zh", "en"), state="readonly", width=8)
+        language.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        language.bind("<<ComboboxSelected>>", lambda _event: self._refresh_text())
+
+        ttk.Button(bar, text="Close", command=self.destroy).grid(row=0, column=2, sticky="e")
+
+        text_frame = ttk.Frame(frame)
+        text_frame.grid(row=1, column=0, sticky="nsew")
+        text_frame.rowconfigure(0, weight=1)
+        text_frame.columnconfigure(0, weight=1)
+
+        self.text = tk.Text(text_frame, wrap="word", height=28)
+        self.text.grid(row=0, column=0, sticky="nsew")
+        yscroll = ttk.Scrollbar(text_frame, orient="vertical", command=self.text.yview)
+        yscroll.grid(row=0, column=1, sticky="ns")
+        self.text.configure(yscrollcommand=yscroll.set)
+        self._refresh_text()
+
+    def _refresh_text(self) -> None:
+        self.text.configure(state="normal")
+        self.text.delete("1.0", "end")
+        self.text.insert("1.0", scheduler_help_text(self.language_var.get()))
+        self.text.configure(state="disabled")
 
 
 def _read_tail_text(path: Path, max_chars: int = 60000) -> str:
