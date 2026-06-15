@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 
 import pytest
 
@@ -261,6 +262,27 @@ def test_refresh_record_output_updates_progress_and_cpu(tmp_path):
     assert refreshed.latest_simulation_time == 0.5
     assert refreshed.progress_percent == 50.0
     assert refreshed.cpu_file_available
+
+
+def test_refresh_record_output_estimates_remaining_time(tmp_path):
+    scheduler = FdsScheduler(state_dir=tmp_path / "state")
+    record = scheduler.submit(
+        JobConfig(
+            case_path=Path("tests/sample_case.fds"),
+            output_mode="named_dir",
+            output_dir=tmp_path / "run",
+        )
+    )
+    record.status = JobStatus.RUNNING
+    record.started_at = time.time() - 10
+    workdir = record.working_dir or record.config.case_path.parent
+    (workdir / "sample_case.err").write_text("Time Step:       1, Simulation Time:   0.5 s\n", encoding="utf-8")
+
+    refreshed = scheduler.refresh_record_output(record.id)
+
+    assert refreshed.progress_percent == 50.0
+    assert refreshed.estimated_remaining_seconds is not None
+    assert refreshed.estimated_remaining_seconds > 0
 
 
 def test_smv_preview_prefers_saved_view_file(tmp_path):

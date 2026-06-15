@@ -62,6 +62,7 @@ class JobRecord:
     mpi_processes_started: int = 0
     latest_simulation_time: float | None = None
     progress_percent: float | None = None
+    estimated_remaining_seconds: float | None = None
     cpu_file_available: bool = False
 
     def to_jsonable(self) -> dict:
@@ -123,6 +124,7 @@ class JobRecord:
             mpi_processes_started=int(data.get("mpi_processes_started", 0) or 0),
             latest_simulation_time=data.get("latest_simulation_time"),
             progress_percent=data.get("progress_percent"),
+            estimated_remaining_seconds=data.get("estimated_remaining_seconds"),
             cpu_file_available=bool(data.get("cpu_file_available", False)),
         )
 
@@ -372,6 +374,7 @@ class FdsScheduler:
         record.latest_simulation_time = output.latest_simulation_time
         record.cpu_file_available = bool(output.cpu_file)
         record.progress_percent = self._calculate_progress(record, output)
+        record.estimated_remaining_seconds = self._estimate_remaining_seconds(record)
         if record.status == JobStatus.CANCELLED:
             pass
         elif record.status == JobStatus.STOPPING:
@@ -395,6 +398,7 @@ class FdsScheduler:
         record.latest_simulation_time = output.latest_simulation_time
         record.cpu_file_available = bool(output.cpu_file)
         record.progress_percent = self._calculate_progress(record, output)
+        record.estimated_remaining_seconds = self._estimate_remaining_seconds(record)
         self._save_state()
         self._notify(record)
         return record
@@ -435,6 +439,7 @@ class FdsScheduler:
             mpi_processes_started=output.mpi_processes_started,
             latest_simulation_time=output.latest_simulation_time,
             progress_percent=self._calculate_progress_for_info(case_info, output),
+            estimated_remaining_seconds=0.0 if output.success_detected else None,
             cpu_file_available=bool(output.cpu_file),
         )
         with self._lock:
@@ -455,6 +460,20 @@ class FdsScheduler:
                 return 100.0
             return None
         return max(0.0, min(100.0, output.latest_simulation_time / t_end * 100.0))
+
+    @staticmethod
+    def _estimate_remaining_seconds(record: JobRecord) -> float | None:
+        if record.status in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.STOPPED, JobStatus.CANCELLED}:
+            return 0.0
+        if not record.started_at or not record.progress_percent or record.progress_percent <= 0:
+            return None
+        if record.progress_percent >= 100:
+            return 0.0
+        elapsed = time.time() - record.started_at
+        if elapsed <= 0:
+            return None
+        total_estimated = elapsed / (record.progress_percent / 100.0)
+        return max(0.0, total_estimated - elapsed)
 
     @staticmethod
     def _status_from_existing_output(output: FdsOutputSummary) -> JobStatus:

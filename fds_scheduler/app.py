@@ -19,6 +19,78 @@ from .fds_env import detect_fds_environment
 from .job import FdsScheduler, JobConfig, JobRecord, JobStatus
 
 
+JOB_COLUMNS = (
+    "status",
+    "case",
+    "chid",
+    "progress",
+    "sim_time",
+    "eta",
+    "mpi",
+    "openmp",
+    "ranks",
+    "restart",
+    "cpu",
+    "note",
+    "started",
+    "finished",
+    "log",
+)
+
+JOB_HEADINGS = {
+    "status": "Status",
+    "case": "Case",
+    "chid": "CHID",
+    "progress": "Progress",
+    "sim_time": "Sim Time",
+    "eta": "ETA",
+    "mpi": "MPI",
+    "openmp": "OpenMP",
+    "ranks": "Ranks",
+    "restart": "Restart",
+    "cpu": "CPU",
+    "note": "Note",
+    "started": "Started",
+    "finished": "Finished",
+    "log": "Log",
+}
+
+JOB_WIDTHS = {
+    "status": 98,
+    "case": 190,
+    "chid": 120,
+    "progress": 84,
+    "sim_time": 92,
+    "eta": 92,
+    "mpi": 56,
+    "openmp": 78,
+    "ranks": 64,
+    "restart": 76,
+    "cpu": 58,
+    "note": 240,
+    "started": 148,
+    "finished": 148,
+    "log": 280,
+}
+
+DEFAULT_VISIBLE_COLUMNS = (
+    "status",
+    "case",
+    "chid",
+    "progress",
+    "sim_time",
+    "eta",
+    "mpi",
+    "openmp",
+    "ranks",
+    "restart",
+    "cpu",
+    "note",
+    "started",
+    "finished",
+)
+
+
 class SchedulerApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
@@ -34,6 +106,7 @@ class SchedulerApp(tk.Tk):
         self.job_rows: dict[str, str] = {}
         self.restart_children: dict[str, list[str]] = {}
         self.csv_plot_window: CsvPlotWindow | None = None
+        self.output_windows: dict[str, OutputWindow] = {}
 
         self._build_variables()
         self._build_ui()
@@ -61,6 +134,9 @@ class SchedulerApp(tk.Tk):
         self.use_fds_local_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Ready")
         self.command_preview_var = tk.StringVar(value="")
+        self.column_visibility_vars = {
+            column: tk.BooleanVar(value=column in DEFAULT_VISIBLE_COLUMNS) for column in JOB_COLUMNS
+        }
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -183,59 +259,15 @@ class SchedulerApp(tk.Tk):
         ttk.Button(job_tools, text="Import Result", command=self._import_selected_existing_result).grid(row=0, column=4, padx=(0, 6))
         ttk.Button(job_tools, text="Validation", command=self._open_selected_validation).grid(row=0, column=5, padx=(0, 6))
         ttk.Button(job_tools, text="Delete Job", command=self._delete_selected_job).grid(row=0, column=6, padx=(0, 6))
+        ttk.Button(job_tools, text="Open FDS", command=self._open_selected_fds_file).grid(row=0, column=7, padx=(0, 6))
+        ttk.Button(job_tools, text="Output", command=self._open_selected_output_window).grid(row=0, column=8, padx=(0, 6))
+        ttk.Button(job_tools, text="Columns", command=self._open_column_chooser).grid(row=0, column=9, padx=(0, 6))
 
-        columns = (
-            "status",
-            "case",
-            "chid",
-            "progress",
-            "sim_time",
-            "mpi",
-            "openmp",
-            "ranks",
-            "restart",
-            "cpu",
-            "note",
-            "started",
-            "finished",
-            "log",
-        )
-        self.jobs_tree = ttk.Treeview(jobs_frame, columns=columns, show="headings", selectmode="browse")
-        headings = {
-            "status": "Status",
-            "case": "Case",
-            "chid": "CHID",
-            "progress": "Progress",
-            "sim_time": "Sim Time",
-            "mpi": "MPI",
-            "openmp": "OpenMP",
-            "ranks": "Ranks",
-            "restart": "Restart",
-            "cpu": "CPU",
-            "note": "Note",
-            "started": "Started",
-            "finished": "Finished",
-            "log": "Log",
-        }
-        widths = {
-            "status": 98,
-            "case": 210,
-            "chid": 120,
-            "progress": 84,
-            "sim_time": 92,
-            "mpi": 56,
-            "openmp": 78,
-            "ranks": 64,
-            "restart": 76,
-            "cpu": 58,
-            "note": 260,
-            "started": 148,
-            "finished": 148,
-            "log": 280,
-        }
-        for column in columns:
-            self.jobs_tree.heading(column, text=headings[column])
-            self.jobs_tree.column(column, width=widths[column], minwidth=widths[column], anchor="w", stretch=False)
+        self.jobs_tree = ttk.Treeview(jobs_frame, columns=JOB_COLUMNS, show="headings", selectmode="browse")
+        for column in JOB_COLUMNS:
+            self.jobs_tree.heading(column, text=JOB_HEADINGS[column])
+            self.jobs_tree.column(column, width=JOB_WIDTHS[column], minwidth=JOB_WIDTHS[column], anchor="w", stretch=False)
+        self._apply_visible_columns()
         self.jobs_tree.grid(row=1, column=0, sticky="nsew")
         yscroll = ttk.Scrollbar(jobs_frame, orient="vertical", command=self.jobs_tree.yview)
         yscroll.grid(row=1, column=1, sticky="ns")
@@ -454,6 +486,37 @@ class SchedulerApp(tk.Tk):
         else:
             messagebox.showinfo("No directory", f"Working directory does not exist:\n{workdir}")
 
+    def _open_selected_fds_file(self) -> None:
+        job_id = self._selected_job_id()
+        path = None
+        if job_id:
+            path = self.scheduler.jobs[job_id].config.case_path
+        elif self.case_path_var.get():
+            path = Path(self.case_path_var.get())
+        if not path or not path.exists():
+            messagebox.showinfo("No FDS file", "Select a job or browse to a .fds file first.")
+            return
+        try:
+            opener = open_fds_in_editor(path)
+            self.status_var.set(f"Opened {path.name} with {opener}")
+        except OSError as exc:
+            messagebox.showerror("Open FDS failed", f"{path}\n\n{exc}")
+
+    def _open_selected_output_window(self) -> None:
+        job_id = self._selected_job_id()
+        if not job_id:
+            return
+        record = self.scheduler.jobs[job_id]
+        window = self.output_windows.get(job_id)
+        if window and window.winfo_exists():
+            window.refresh()
+            window.focus()
+            return
+        self.output_windows[job_id] = OutputWindow(self, record)
+
+    def _open_column_chooser(self) -> None:
+        ColumnChooserWindow(self).focus()
+
     def _plot_selected_csv(self) -> None:
         job_id = self._selected_job_id()
         if not job_id:
@@ -614,6 +677,7 @@ class SchedulerApp(tk.Tk):
             record.case_info.chid if record.case_info else "",
             self._format_progress(record.progress_percent),
             self._format_float(record.latest_simulation_time),
+            self._format_duration(record.estimated_remaining_seconds),
             record.config.mpi_processes,
             record.config.openmp_threads,
             record.mpi_processes_started or "",
@@ -638,6 +702,9 @@ class SchedulerApp(tk.Tk):
             self.job_rows[record.id] = record.id
         if record.status in {JobStatus.FAILED, JobStatus.STOPPED, JobStatus.SUCCEEDED, JobStatus.CANCELLED}:
             self.status_var.set(f"Job {record.id}: {record.status.value}")
+        output_window = self.output_windows.get(record.id)
+        if output_window and output_window.winfo_exists():
+            output_window.refresh(record)
 
     def _show_selected_details(self) -> None:
         job_id = self._selected_job_id()
@@ -651,6 +718,7 @@ class SchedulerApp(tk.Tk):
             parts.append(f"Working directory: {record.working_dir}")
         parts.append(f"Progress: {self._format_progress(record.progress_percent)}")
         parts.append(f"Simulation time: {self._format_float(record.latest_simulation_time)}")
+        parts.append(f"Estimated remaining: {self._format_duration(record.estimated_remaining_seconds)}")
         parts.append(f"CPU file: {'yes' if record.cpu_file_available else 'no'}")
         smv_preview = smv_preview_file_for_record(record)
         parts.append(f"SMV preview: {smv_preview.name if smv_preview else 'no'}")
@@ -727,6 +795,26 @@ class SchedulerApp(tk.Tk):
         return f"{value:.3g}"
 
     @staticmethod
+    def _format_duration(value: float | None) -> str:
+        if value is None:
+            return ""
+        seconds = max(0, int(round(value)))
+        hours, remainder = divmod(seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours:
+            return f"{hours:d}h {minutes:02d}m"
+        if minutes:
+            return f"{minutes:d}m {seconds:02d}s"
+        return f"{seconds:d}s"
+
+    def _apply_visible_columns(self) -> None:
+        visible = [column for column, var in self.column_visibility_vars.items() if var.get()]
+        if not visible:
+            visible = ["status"]
+            self.column_visibility_vars["status"].set(True)
+        self.jobs_tree.configure(displaycolumns=visible)
+
+    @staticmethod
     def _record_note(record: JobRecord) -> str:
         note = record.fds_note or record.error
         if record.config.restart and record.config.restart_from_job_id:
@@ -796,6 +884,114 @@ def find_pyrosim_results() -> Path | None:
         if matches:
             return matches[0]
     return None
+
+
+def open_fds_in_editor(path: Path) -> str:
+    for command in ("code.cmd", "code.exe", "code"):
+        resolved = shutil.which(command)
+        if resolved:
+            subprocess.Popen([resolved, str(path)], cwd=str(path.parent))
+            return "VS Code"
+    vscode_candidates = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Microsoft VS Code" / "Code.exe",
+        Path(r"C:\Program Files\Microsoft VS Code\Code.exe"),
+        Path(r"C:\Program Files (x86)\Microsoft VS Code\Code.exe"),
+    ]
+    for candidate in vscode_candidates:
+        if candidate.exists():
+            subprocess.Popen([str(candidate), str(path)], cwd=str(path.parent))
+            return "VS Code"
+    os.startfile(path)
+    return "Windows default app"
+
+
+def output_file_for_record(record: JobRecord) -> Path | None:
+    candidates = []
+    if record.log_path:
+        candidates.append(record.log_path)
+    workdir = record.working_dir or record.config.case_path.parent
+    chid = record.case_info.chid if record.case_info else record.config.case_path.stem
+    candidates.extend([workdir / f"{chid}.err", workdir / f"{chid}.out"])
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return record.log_path
+
+
+class OutputWindow(tk.Toplevel):
+    def __init__(self, master: tk.Tk, record: JobRecord) -> None:
+        super().__init__(master)
+        self.record = record
+        self.title(f"Output - {record.case_info.chid if record.case_info else record.id}")
+        self.geometry("980x560")
+        self.minsize(720, 420)
+        self.rowconfigure(1, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        self.path_var = tk.StringVar(value="")
+        ttk.Label(self, textvariable=self.path_var, padding=(10, 8, 10, 4)).grid(row=0, column=0, sticky="ew")
+        frame = ttk.Frame(self, padding=(10, 0, 10, 10))
+        frame.grid(row=1, column=0, sticky="nsew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        self.text = tk.Text(frame, background="#050505", foreground="#e5e7eb", insertbackground="#e5e7eb", wrap="none")
+        self.text.grid(row=0, column=0, sticky="nsew")
+        yscroll = ttk.Scrollbar(frame, orient="vertical", command=self.text.yview)
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll = ttk.Scrollbar(frame, orient="horizontal", command=self.text.xview)
+        xscroll.grid(row=1, column=0, sticky="ew")
+        self.text.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        self.after_id: str | None = None
+        self.protocol("WM_DELETE_WINDOW", self._close)
+        self.refresh(record)
+
+    def refresh(self, record: JobRecord | None = None) -> None:
+        if record is not None:
+            self.record = record
+        path = output_file_for_record(self.record)
+        self.path_var.set(str(path) if path else "No output file yet")
+        text = ""
+        if path and path.exists():
+            text = _read_tail_text(path, max_chars=60000)
+        self.text.configure(state="normal")
+        self.text.delete("1.0", "end")
+        self.text.insert("1.0", text)
+        self.text.see("end")
+        self.text.configure(state="disabled")
+        if self.after_id:
+            self.after_cancel(self.after_id)
+        self.after_id = self.after(2000, self.refresh)
+
+    def _close(self) -> None:
+        if self.after_id:
+            self.after_cancel(self.after_id)
+        self.destroy()
+
+
+class ColumnChooserWindow(tk.Toplevel):
+    def __init__(self, app: SchedulerApp) -> None:
+        super().__init__(app)
+        self.app = app
+        self.title("Job Columns")
+        self.resizable(False, False)
+        frame = ttk.Frame(self, padding=12)
+        frame.grid(row=0, column=0, sticky="nsew")
+        for index, column in enumerate(JOB_COLUMNS):
+            ttk.Checkbutton(frame, text=JOB_HEADINGS[column], variable=app.column_visibility_vars[column], command=app._apply_visible_columns).grid(
+                row=index // 2, column=index % 2, sticky="w", padx=(0, 18), pady=3
+            )
+
+
+def _read_tail_text(path: Path, max_chars: int = 60000) -> str:
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            if size > max_chars:
+                handle.seek(-max_chars, 2)
+            data = handle.read()
+        return data.decode("utf-8", errors="replace")
+    except OSError as exc:
+        return f"Unable to read output:\n{exc}"
 
 
 class CsvSeriesData:
