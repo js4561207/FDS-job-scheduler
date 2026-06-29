@@ -535,7 +535,9 @@ class FdsScheduler:
                 force_openmp = True
             if force_openmp:
                 flags.append("-f")
-            flags.extend(["-p", str(config.mpi_processes), "-o", str(openmp_threads)])
+            if config.mpi_processes > 1:
+                flags.extend(["-p", str(config.mpi_processes)])
+            flags.extend(["-o", str(openmp_threads)])
             command = f'call "{env.fdsinit}" && fds_local {" ".join(flags)} {case_arg}'
         else:
             executable = "fds"

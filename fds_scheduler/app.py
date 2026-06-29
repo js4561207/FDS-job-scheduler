@@ -1001,71 +1001,91 @@ def scheduler_help_text(language: str = "zh") -> str:
     if language == "en":
         return (
             "FDS Scheduler Help\n\n"
-            "1. Workflow\n"
-            "- Browse: choose a .fds input file.\n"
-            "- Add Job: queue the case.\n"
-            "- Output: open the live black output window for the selected job.\n"
-            "- Open FDS: open the selected .fds file in VS Code.\n"
-            "- Plot CSV / Validation / Open SMV: inspect curves, compare experiment data, or open the Smokeview/PyroSim preview.\n\n"
-            "2. MPI / OpenMP defaults\n"
-            "- MPI processes: the scheduler reads MESH blocks and uses MPI_PROCESS assignments when present. If no assignment exists, it falls back to the mesh count.\n"
-            "- OpenMP threads: default is 1.\n"
-            "- Solver = auto: use normal FDS when OpenMP threads = 1; use the OpenMP-capable executable when OpenMP threads > 1.\n"
-            "- Solver = fds: force normal FDS and keep OpenMP threads at 1.\n"
-            "- Solver = openmp: force the OpenMP-capable executable.\n"
-            "- Pure OpenMP: set MPI = 1, Solver = openmp, and OpenMP threads >= 2.\n\n"
-            "3. Practical rules\n"
-            "- For most multi-mesh cases, start with MPI first. A safe first try is MPI = mesh count and OpenMP = 1.\n"
-            "- Use OpenMP when you have a clear core plan, or when one large mesh benefits from threading.\n"
-            "- Avoid MPI x OpenMP settings that exceed real CPU cores unless you intentionally enable oversubscribed mode.\n"
-            "- Keep MPI consistent with existing MPI_PROCESS assignments in the .fds file.\n"
-            "- Too many MPI ranks for too few meshes usually wastes time.\n\n"
-            "4. fds_local\n"
-            "- Use the fds_local wrapper first on Windows.\n"
-            "- If you turn it off, the scheduler builds a direct mpiexec command.\n"
-            "- fds_local does not handle spaces in .fds file names well.\n\n"
-            "5. Path advice\n"
+            "0. Use the official FDS installation\n"
+            "- Install the official FDS + Smokeview package for Windows before using this scheduler.\n"
+            "- The scheduler calls the same FDS environment used by the official command prompt. It looks for fdsinit.bat and then launches your case.\n"
+            "- Think of this app as a queue, launcher, and result viewer. The solver itself still comes from the official FDS installation.\n\n"
+            "1. Command-line patterns\n"
+            "Typical Windows MPI run:\n"
+            "  fds_local -p 4 -o 1 case.fds\n\n"
+            "Direct MPI run:\n"
+            "  mpiexec -n 4 fds case.fds\n\n"
+            "Hybrid MPI + OpenMP run:\n"
+            "  fds_local -p 4 -o 2 case.fds\n\n"
+            "Pure OpenMP run:\n"
+            "  fds_local -f -o 8 case.fds\n\n"
+            "2. Mapping to scheduler settings\n"
+            "- MPI processes is the value passed to -p, or to mpiexec -n. With fds_local, MPI = 1 is the default, so the scheduler omits -p in pure OpenMP runs.\n"
+            "- OpenMP threads is the value passed to -o.\n"
+            "- Solver = auto chooses standard FDS for OpenMP = 1 and the OpenMP-capable executable when OpenMP > 1.\n"
+            "- Solver = fds keeps the run on standard FDS and treats OpenMP as 1.\n"
+            "- Solver = openmp explicitly selects the OpenMP-capable executable.\n"
+            "- Force OpenMP executable is a manual override. Use it only when you know the FDS installation expects that path.\n\n"
+            "3. Default logic\n"
+            "- After you select a .fds file, the scheduler reads MESH and MPI_PROCESS.\n"
+            "- If MPI_PROCESS is defined, the default MPI count follows those process groups.\n"
+            "- If MPI_PROCESS is not defined, the default MPI count is the number of meshes.\n"
+            "- OpenMP defaults to 1. That is the most predictable starting point and the easiest one to debug.\n\n"
+            "4. Practical starting points\n"
+            "- Multi-mesh case: start with MPI. A good first setting is MPI = mesh count and OpenMP = 1.\n"
+            "- One very large mesh: try MPI = 1 and OpenMP near the physical-core count, then compare wall-clock time.\n"
+            "- Hybrid MPI + OpenMP can be useful, but only with a clear CPU plan. Avoid MPI x OpenMP exceeding the real number of cores.\n"
+            "- If the input file already contains MPI_PROCESS, keep the scheduler's MPI count aligned with it.\n\n"
+            "5. File and path advice\n"
             "- Avoid Chinese characters in project paths and .fds file names.\n"
-            "- Also avoid spaces and very long paths. Short ASCII folders are safer.\n"
-            "- Put each case in its own folder when possible.\n\n"
-            "6. ETA\n"
-            "- ETA is estimated from elapsed wall time and the current progress percentage.\n"
-            "- It becomes meaningful only after FDS starts writing time-step progress.\n"
-            "- Early ETA can jump around; trust the trend after the run settles."
+            "- Avoid spaces in .fds file names, especially with fds_local.\n"
+            "- Short ASCII paths are safest, for example E:\\fds_projects\\case01\\case.fds.\n"
+            "- Keep each case in its own folder. FDS writes many output files beside the input.\n\n"
+            "6. After the run\n"
+            "- Output shows the live .err/.out stream.\n"
+            "- Plot CSV opens FDS time-series CSV files.\n"
+            "- Validation compares FDS CSV results with experiment data from Excel.\n"
+            "- Open SMV opens the saved Smokeview or PyroSim preview when one is available.\n"
+            "- ETA is estimated from elapsed time and current progress. Treat early values as a rough hint, not a promise."
         )
     return (
         "FDS 调度器帮助\n\n"
-        "1. 基本流程\n"
-        "- Browse：选择 .fds 输入文件。\n"
-        "- Add Job：加入任务队列。\n"
-        "- Output：打开所选任务的黑色输出窗口。\n"
-        "- Open FDS：用 VS Code 打开所选 .fds 文件。\n"
-        "- Plot CSV / Validation / Open SMV：看曲线、对比实验数据，或打开 Smokeview / PyroSim 预览。\n\n"
-        "2. MPI / OpenMP 默认逻辑\n"
-        "- MPI 进程：程序会读取 MESH 和 MPI_PROCESS 设置；如果文件里没有写 MPI_PROCESS，就按网格数作为默认值。\n"
-        "- OpenMP 线程：默认是 1。\n"
-        "- Solver = auto：OpenMP 线程等于 1 时用普通 FDS；大于 1 时用 OpenMP 版本。\n"
-        "- Solver = fds：强制普通 FDS，并把 OpenMP 视为 1。\n"
-        "- Solver = openmp：强制使用 OpenMP 版本。\n"
-        "- Pure OpenMP：把 MPI 设为 1，Solver 设为 openmp，OpenMP 至少为 2。\n\n"
-        "3. 简单规则\n"
-        "- 大多数多网格算例，先用 MPI。一个常见起点是 MPI = 网格数，OpenMP = 1。\n"
-        "- OpenMP 更适合线程规划清楚，或者单个大网格能从线程中受益的情况。\n"
-        "- 不要让 MPI x OpenMP 超过真实 CPU 核心数，除非你明确要用 oversubscribed 模式。\n"
-        "- 如果 .fds 里已经写了 MPI_PROCESS，最好保持 MPI 进程数一致。\n"
-        "- MPI 进程过多、网格过少，一般只会浪费时间。\n\n"
-        "4. fds_local\n"
-        "- Windows 上优先用 fds_local 启动。\n"
-        "- 关闭后，程序会改成直接拼 mpiexec 命令。\n"
-        "- fds_local 对 .fds 文件名里的空格不友好。\n\n"
-        "5. 路径建议\n"
-        "- 强烈建议不要在项目路径或 .fds 文件名里使用中文字符。\n"
-        "- 也尽量不要有空格和特别长的路径。短一点的英文路径更稳。\n"
-        "- 尽量一个算例一个文件夹。\n\n"
-        "6. 剩余时间估计\n"
-        "- ETA 根据已用时间和当前进度百分比估算。\n"
-        "- 只有 FDS 开始写时间步进度后才比较有意义。\n"
-        "- 前期 ETA 可能波动较大，运行稳定后更可信。"
+        "0. 先使用官方 FDS 安装包\n"
+        "- 请先安装官方发布的 FDS + Smokeview Windows 版本。\n"
+        "- 本调度器会调用官方命令行同一套环境：先找到 fdsinit.bat，再启动算例。\n"
+        "- 可以把它理解成排队、启动和查看结果的外壳；真正的求解器仍然来自官方 FDS。\n\n"
+        "1. 常见命令行写法\n"
+        "Windows 下常用的 MPI 启动方式：\n"
+        "  fds_local -p 4 -o 1 case.fds\n\n"
+        "直接使用 mpiexec：\n"
+        "  mpiexec -n 4 fds case.fds\n\n"
+        "MPI + OpenMP 混合并行：\n"
+        "  fds_local -p 4 -o 2 case.fds\n\n"
+        "只使用 OpenMP：\n"
+        "  fds_local -f -o 8 case.fds\n\n"
+        "2. 调度器里的对应关系\n"
+        "- MPI processes 对应 -p，或者 mpiexec -n 后面的数。使用 fds_local 时，MPI = 1 是默认值，所以纯 OpenMP 运行会省略 -p。\n"
+        "- OpenMP threads 对应 -o。\n"
+        "- Solver = auto：OpenMP = 1 时用标准 FDS；OpenMP > 1 时用支持 OpenMP 的可执行程序。\n"
+        "- Solver = fds：固定使用标准 FDS，并把 OpenMP 按 1 处理。\n"
+        "- Solver = openmp：明确使用支持 OpenMP 的可执行程序。\n"
+        "- Force OpenMP executable 是手动覆盖选项。只有在你确认当前 FDS 安装需要这样选择时再使用。\n\n"
+        "3. 默认逻辑\n"
+        "- 选择 .fds 文件后，调度器会读取 MESH 和 MPI_PROCESS。\n"
+        "- 如果文件里写了 MPI_PROCESS，默认 MPI 数按这些进程分组确定。\n"
+        "- 如果没有写 MPI_PROCESS，默认 MPI 数等于网格数。\n"
+        "- OpenMP 默认是 1。这个设置最可预测，也最容易排查问题。\n\n"
+        "4. 实用起点\n"
+        "- 多网格算例：先从 MPI 开始。比较稳的起点是 MPI = 网格数，OpenMP = 1。\n"
+        "- 单个特别大的网格：可以试 MPI = 1，OpenMP 接近物理核心数，再比较实际耗时。\n"
+        "- MPI + OpenMP 混合并行可能有收益，但要先想清楚 CPU 分配。不要让 MPI x OpenMP 超过真实核心数。\n"
+        "- 如果 .fds 已经写了 MPI_PROCESS，调度器里的 MPI 数应与它保持一致。\n\n"
+        "5. 文件和路径建议\n"
+        "- 不建议在项目路径或 .fds 文件名里使用中文字符。\n"
+        "- 使用 fds_local 时，尤其要避免 .fds 文件名包含空格。\n"
+        "- 推荐短英文路径，例如 E:\\fds_projects\\case01\\case.fds。\n"
+        "- 尽量一个算例放一个文件夹。FDS 会在输入文件旁生成大量输出文件。\n\n"
+        "6. 计算后查看\n"
+        "- Output：查看实时 .err/.out 输出流。\n"
+        "- Plot CSV：打开 FDS 时间序列 CSV。\n"
+        "- Validation：把 FDS CSV 结果与 Excel 实验数据对比。\n"
+        "- Open SMV：如果已有 Smokeview 或 PyroSim 预览文件，就直接打开。\n"
+        "- ETA：根据已用时间和当前进度估算。前期数值只适合作粗略参考，不要当作精确承诺。"
     )
 
 
@@ -1322,6 +1342,77 @@ def _numeric_series_columns(rows: list[list[float | None]], start_column: int) -
     return columns
 
 
+class PlotHover:
+    def __init__(self, canvas: tk.Canvas) -> None:
+        self.canvas = canvas
+        self.points: list[tuple[float, float, str]] = []
+        self.overlay_ids: list[int] = []
+        self.bounds: tuple[float, float, float, float] | None = None
+        canvas.bind("<Motion>", self._on_motion, add="+")
+        canvas.bind("<Leave>", lambda _event: self.hide(), add="+")
+
+    def clear(self) -> None:
+        self.points.clear()
+        self.bounds = None
+        self.hide()
+
+    def set_bounds(self, left: float, right: float, top: float, bottom: float) -> None:
+        self.bounds = (left, right, top, bottom)
+
+    def add_point(self, x: float, y: float, text: str) -> None:
+        self.points.append((x, y, text))
+
+    def hide(self) -> None:
+        for item_id in self.overlay_ids:
+            self.canvas.delete(item_id)
+        self.overlay_ids.clear()
+
+    def _on_motion(self, event: tk.Event) -> None:
+        if not self.points:
+            return
+        nearest = min(self.points, key=lambda item: (item[0] - event.x) ** 2 + (item[1] - event.y) ** 2)
+        distance_sq = (nearest[0] - event.x) ** 2 + (nearest[1] - event.y) ** 2
+        if distance_sq > 12 ** 2:
+            self.hide()
+            return
+        self._show(event.x, event.y, nearest[0], nearest[1], nearest[2])
+
+    def _show(self, cursor_x: float, cursor_y: float, point_x: float, point_y: float, text: str) -> None:
+        self.hide()
+        left, right, top, bottom = self.bounds or (0, self.canvas.winfo_width(), 0, self.canvas.winfo_height())
+        guide_x = self.canvas.create_line(point_x, top, point_x, bottom, fill="#94a3b8", dash=(3, 3))
+        guide_y = self.canvas.create_line(left, point_y, right, point_y, fill="#94a3b8", dash=(3, 3))
+        marker_outer = self.canvas.create_oval(point_x - 5, point_y - 5, point_x + 5, point_y + 5, outline="#0f172a", width=2)
+        marker_inner = self.canvas.create_oval(point_x - 2, point_y - 2, point_x + 2, point_y + 2, fill="#0f172a", outline="#0f172a")
+        padding = 5
+        label_x = cursor_x + 12
+        label_y = cursor_y - 12
+        anchor = "sw"
+        if label_x > self.canvas.winfo_width() - 150:
+            label_x = cursor_x - 12
+            anchor = "se"
+        if label_y < 32:
+            label_y = cursor_y + 12
+            anchor = "nw" if anchor == "sw" else "ne"
+        label = self.canvas.create_text(label_x, label_y, text=text, anchor=anchor, fill="#0f172a", font=("TkDefaultFont", 9))
+        bbox = self.canvas.bbox(label)
+        if not bbox:
+            self.overlay_ids = [guide_x, guide_y, marker_outer, marker_inner, label]
+            return
+        rect = self.canvas.create_rectangle(
+            bbox[0] - padding,
+            bbox[1] - padding,
+            bbox[2] + padding,
+            bbox[3] + padding,
+            fill="#f8fafc",
+            outline="#64748b",
+        )
+        for item_id in (guide_x, guide_y, marker_outer, marker_inner, rect, label):
+            self.canvas.tag_raise(item_id)
+        self.canvas.tag_raise(label, rect)
+        self.overlay_ids = [guide_x, guide_y, marker_outer, marker_inner, rect, label]
+
+
 class CsvPlotWindow(tk.Toplevel):
     COLORS = ("#2563eb", "#dc2626", "#059669", "#9333ea", "#d97706", "#0891b2", "#be123c", "#4f46e5")
 
@@ -1336,6 +1427,7 @@ class CsvPlotWindow(tk.Toplevel):
         self.start_var = tk.DoubleVar(value=0)
         self.end_var = tk.DoubleVar(value=100)
         self.file_var = tk.StringVar(value=str(csv_files[0]))
+        self.dir_var = tk.StringVar(value=str(csv_files[0].parent))
         self.status_var = tk.StringVar(value="")
 
         self.columnconfigure(1, weight=1)
@@ -1352,6 +1444,7 @@ class CsvPlotWindow(tk.Toplevel):
         combo.grid(row=0, column=1, sticky="ew", padx=8)
         combo.bind("<<ComboboxSelected>>", lambda _event: self._load_selected_file())
         ttk.Button(top, text="Open Dir", command=self._open_csv_dir).grid(row=0, column=2)
+        ttk.Label(top, textvariable=self.dir_var, foreground="#475569").grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         side = ttk.Frame(self, padding=(10, 0, 8, 10))
         side.grid(row=1, column=0, sticky="ns")
@@ -1373,6 +1466,7 @@ class CsvPlotWindow(tk.Toplevel):
         self.canvas = tk.Canvas(plot_frame, background="white", highlightthickness=1, highlightbackground="#cbd5e1")
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", lambda _event: self._redraw())
+        self.hover = PlotHover(self.canvas)
 
         range_frame = ttk.Frame(plot_frame)
         range_frame.grid(row=1, column=0, sticky="ew", pady=(8, 0))
@@ -1394,6 +1488,7 @@ class CsvPlotWindow(tk.Toplevel):
         except Exception as exc:
             messagebox.showerror("CSV load failed", str(exc))
             return
+        self.dir_var.set(str(Path(self.file_var.get()).parent))
         self.series_list.delete(0, "end")
         self.visible_columns = self.data.series_columns
         for index in self.visible_columns:
@@ -1425,6 +1520,7 @@ class CsvPlotWindow(tk.Toplevel):
 
     def _redraw(self) -> None:
         self.canvas.delete("all")
+        self.hover.clear()
         if not self.data:
             return
         width = max(self.canvas.winfo_width(), 300)
@@ -1462,6 +1558,7 @@ class CsvPlotWindow(tk.Toplevel):
             y_max += pad
 
         self._draw_axes(left, right, top, bottom, x_min, x_max, y_min, y_max)
+        self.hover.set_bounds(left, right, top, bottom)
         for series_index, col in enumerate(selected):
             points = []
             for row in rows:
@@ -1470,6 +1567,8 @@ class CsvPlotWindow(tk.Toplevel):
                 x = left + (row[0] - x_min) / (x_max - x_min) * (right - left)
                 y = bottom - (row[col] - y_min) / (y_max - y_min) * (bottom - top)
                 points.extend((x, y))
+                label = self.data.headers[col] if col < len(self.data.headers) else f"Column {col + 1}"
+                self.hover.add_point(x, y, f"{label}\nX={row[0]:.4g}\nY={row[col]:.4g}")
             if len(points) >= 4:
                 color = self.COLORS[series_index % len(self.COLORS)]
                 self.canvas.create_line(*points, fill=color, width=2)
@@ -1508,6 +1607,7 @@ class ValidationWindow(tk.Toplevel):
         self.fds = self._load_best_fds_data(csv_files)
         self.matches = match_validation_series(self.experiment, self.fds)
         self.visible_matches: list[ValidationMatch] = []
+        self.dir_var = tk.StringVar(value=str(self.fds.path.parent))
         self.status_var = tk.StringVar(value="")
 
         self.columnconfigure(1, weight=1)
@@ -1521,6 +1621,7 @@ class ValidationWindow(tk.Toplevel):
         top.grid(row=0, column=0, columnspan=2, sticky="ew")
         ttk.Label(top, text=f"Experiment: {self.experiment.path.name}").grid(row=0, column=0, sticky="w")
         ttk.Label(top, text=f"FDS: {self.fds.path.name}").grid(row=0, column=1, sticky="w", padx=(20, 0))
+        ttk.Label(top, textvariable=self.dir_var, foreground="#475569").grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         side = ttk.Frame(self, padding=(10, 0, 8, 10))
         side.grid(row=1, column=0, sticky="ns")
@@ -1542,6 +1643,7 @@ class ValidationWindow(tk.Toplevel):
         self.canvas = tk.Canvas(plot_frame, background="white", highlightthickness=1, highlightbackground="#cbd5e1")
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", lambda _event: self._redraw())
+        self.hover = PlotHover(self.canvas)
         ttk.Label(plot_frame, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(6, 0))
 
     def _populate_matches(self) -> None:
@@ -1562,6 +1664,7 @@ class ValidationWindow(tk.Toplevel):
 
     def _redraw(self) -> None:
         self.canvas.delete("all")
+        self.hover.clear()
         width = max(self.canvas.winfo_width(), 320)
         height = max(self.canvas.winfo_height(), 240)
         left, right, top, bottom = 72, max(width - 260, 200), 36, height - 58
@@ -1591,6 +1694,7 @@ class ValidationWindow(tk.Toplevel):
             y_max += pad
 
         self._draw_axes(left, right, top, bottom, x_min, x_max, y_min, y_max)
+        self.hover.set_bounds(left, right, top, bottom)
         legend_y = top + 14
         for index, match in enumerate(selected):
             color = self.COLORS[index % len(self.COLORS)]
@@ -1598,6 +1702,14 @@ class ValidationWindow(tk.Toplevel):
             exp_points = self._map_points(
                 self._series_points(self.experiment.rows, match.experiment_column), left, right, top, bottom, x_min, x_max, y_min, y_max
             )
+            for x_value, y_value, sx, sy in self._mapped_point_details(
+                self._series_points(self.fds.rows, match.fds_column), left, right, top, bottom, x_min, x_max, y_min, y_max
+            ):
+                self.hover.add_point(sx, sy, f"{match.label} FDS\nX={x_value:.4g}\nY={y_value:.4g}")
+            for x_value, y_value, sx, sy in self._mapped_point_details(
+                self._series_points(self.experiment.rows, match.experiment_column), left, right, top, bottom, x_min, x_max, y_min, y_max
+            ):
+                self.hover.add_point(sx, sy, f"{match.label} Experiment\nX={x_value:.4g}\nY={y_value:.4g}")
             if len(fds_points) >= 4:
                 self.canvas.create_line(*fds_points, fill=color, width=2)
             if len(exp_points) >= 4:
@@ -1642,6 +1754,17 @@ class ValidationWindow(tk.Toplevel):
             x = left + (x_value - x_min) / (x_max - x_min) * (right - left)
             y = bottom - (y_value - y_min) / (y_max - y_min) * (bottom - top)
             mapped.extend((x, y))
+        return mapped
+
+    @staticmethod
+    def _mapped_point_details(
+        points: list[tuple[float, float]], left: int, right: int, top: int, bottom: int, x_min: float, x_max: float, y_min: float, y_max: float
+    ) -> list[tuple[float, float, float, float]]:
+        mapped: list[tuple[float, float, float, float]] = []
+        for x_value, y_value in points:
+            x = left + (x_value - x_min) / (x_max - x_min) * (right - left)
+            y = bottom - (y_value - y_min) / (y_max - y_min) * (bottom - top)
+            mapped.append((x_value, y_value, x, y))
         return mapped
 
     def _draw_dashed_polyline(self, points: list[float], color: str) -> None:

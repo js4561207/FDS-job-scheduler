@@ -96,7 +96,7 @@ def test_pure_openmp_command_uses_single_mpi_rank():
         )
     )
     assert "-f" in record.command
-    assert "-p 1" in record.command
+    assert "-p 1" not in record.command
     assert "-o 4" in record.command
 
 
@@ -214,6 +214,15 @@ def test_preview_config_does_not_create_job(tmp_path):
     assert preview.id == "preview"
     assert "-p 2" in preview.command
     assert not scheduler.jobs
+
+
+def test_fds_local_omits_default_single_mpi_process(tmp_path):
+    scheduler = FdsScheduler(state_dir=tmp_path / "state")
+    preview = scheduler.preview_config(JobConfig(case_path=Path("tests/sample_case.fds"), mpi_processes=1, openmp_threads=4, solver="openmp"))
+    assert "fds_local" in preview.command
+    assert "-f" in preview.command
+    assert "-o 4" in preview.command
+    assert "-p 1" not in preview.command
 
 
 def test_invalid_solver_is_rejected(tmp_path):
@@ -353,11 +362,16 @@ def test_validation_matches_case_insensitive_measurement_names():
 def test_scheduler_help_text_mentions_default_logic_and_path_advice():
     zh_text = scheduler_help_text()
     en_text = scheduler_help_text("en")
-    assert "Solver = auto" in zh_text
-    assert "Pure OpenMP" in zh_text
-    assert "不要在项目路径" in zh_text
+    assert "官方 FDS" in zh_text
+    assert "fds_local -p 4 -o 1 case.fds" in zh_text
+    assert "mpiexec -n 4 fds case.fds" in zh_text
+    assert "fds_local -f -o 8 case.fds" in zh_text
     assert "MPI = 网格数" in zh_text
+    assert "不建议在项目路径" in zh_text
+    assert "official FDS" in en_text
+    assert "fds_local -p 4 -o 1 case.fds" in en_text
+    assert "mpiexec -n 4 fds case.fds" in en_text
+    assert "fds_local -f -o 8 case.fds" in en_text
     assert "Solver = auto" in en_text
-    assert "Pure OpenMP" in en_text
     assert "Avoid Chinese characters" in en_text
     assert "MPI = mesh count" in en_text

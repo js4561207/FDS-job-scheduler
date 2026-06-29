@@ -48,7 +48,7 @@ fds_local -p <mpi_processes> -o <openmp_threads> <case>.fds
 Pure OpenMP is valid:
 
 ```bat
-fds_local -f -p 1 -o <openmp_threads> <case>.fds
+fds_local -f -o <openmp_threads> <case>.fds
 ```
 
 FDS documentation states that OpenMP can run single-mesh or multi-mesh simulations on multiple cores without requiring MPI. MPI is generally the better scaling choice for multiple meshes, but OpenMP-only multi-mesh runs are supported.
